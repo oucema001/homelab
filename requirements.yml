@@ -17,4 +17,4 @@ collections:
   - cisco.ios
   - name: ansibleguy.opnsense
     type: galaxy
-    version: 1.2.9
+    version: 1.2.11
