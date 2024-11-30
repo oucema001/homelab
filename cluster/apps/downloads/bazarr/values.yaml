@@ -5,7 +5,7 @@ controllers:
       bazarr:
         image:
           repository: ghcr.io/onedr0p/bazarr
-          tag: 1.4.2
+          tag: 1.4.5
         env:
           TZ: America/New_York
           POSTGRES_ENABLED: "true"
