@@ -1,4 +1,9 @@
 ---
+- name: Load application vars file
+  include_vars:
+    file: apps.yaml
+    name: apps
+
 - name: Build up app_list to include some conventions for file locations and sort by wave
   tags: always
   set_fact:
@@ -12,7 +17,7 @@
                   cluster_dir,
                   ('path' in item.value) |
                     ternary(
-                      item.value.path|default(omit) if (item.value.path|default(omit) == '') else ('apps', item.value.path|default(omit)),
+                      item.value.path|default(item.value.namespace) if (item.value.path|default('', true) == '') else ('apps', item.value.path|default(omit,true)),
                       ('apps', item.value.namespace)
                     ),
                   item.key
@@ -21,7 +26,7 @@
                 (
                   cluster_dir,
                   'bootstrap',
-                  ('path' in item.value) | ternary(item.value.path, item.value.namespace),
+                  item.value.path|default(item.value.namespace,true),
                   item.key+'.yaml'
                 ) | path_join
              })
@@ -31,35 +36,9 @@
   loop_control:
     label: "{{ item.key }}"
 
-- name: Make app loop
-  set_fact:
-    app_loop: "{{ app_loop | default([]) + [app] }}"
-  loop: >-
-    {{
-      (
-        (apps.values() | selectattr('1.wave','defined') | sort(attribute='1.wave')) +
-        (apps.values() | rejectattr('1.wave','defined'))
-      )
-    }}
-  loop_control:
-    loop_var: app
-    label: "{{ app.name }}"
-  when:
-    # Don't include if app.enable is false
-    - app.enable | default(true)
-    # Start deploying when argument app_start_wave is app.wave
-    - app.wave|default(10)|int >= app_start_wave|default(omit)|int
-    # If there's an argument called app_deploy_list, only include the app if its present
-    - app.name in app_deploy_list|default(apps.keys())
-    # If there's an argument called app_reject_list, don't include this app if its present
-    - app.name not in app_reject_list|default(omit)
-    # Use the argument start_at to get the name of an app to start processing at
-    #- ansible_loop.index0 >=  (app_list | map(attribute='name')).index(start_at )
-  tags: always
-
 - name: Install Application specific configurations and files
   include_tasks: application.yml
-  loop: "{{ app_loop }}"
+  loop: "{{ apps.values() }}"
   loop_control:
     loop_var: app
     label: "{{ app.name }}"
@@ -73,7 +52,7 @@
           'community.sops.sops',
           (
             apps.mysql.app_dir,
-            apps.secrets.keys() | first ~ '.sops.yaml'
+            apps.mysql.secrets.keys() | first ~ '.sops.yaml'
           ) | path_join
         ) | from_yaml
       }}
@@ -87,3 +66,52 @@
           ) | path_join
         ) | from_yaml
       }}
+  when:
+    # Don't include if app.enable is false
+    - app.enable | default(true)
+    # Start deploying when argument app_start_wave is app.wave
+    - app.wave|default(10)|int >= app_start_wave|default(omit)|int
+    # If there's an argument called app_deploy_list, only include the app if its present
+    - app.name in app_deploy_list|default(apps.keys())
+    # If there's an argument called app_reject_list, don't include this app if its present
+    - app.name not in app_reject_list|default(omit)
+    # Use the argument app_start_at to get the name of an app to start processing at
+    # - ansible_loop.index0 >=  (apps.values() | map(attribute='name')).index(app_start_at)
+  register: application_configuration
+
+- name: Commit changes to app files
+  lvrfrc87.git_acp.git_acp:
+    path: "{{ root_dir }}"
+    comment: |-
+      Updated applications:
+      {{ applied_apps | map(attribute='name') | to_nice_yaml }}
+
+      Updated Files:
+      {{ ([files[1]] + [files[2]]) | flatten | to_nice_yaml }}
+
+    add: "{{  files | flatten | unique }}"
+    url: "{{ git_repo_ssh_url }}"
+    push: "{{ git_push | default(true) }}"
+    branch: "{{ git_branch }}"
+  when:
+    - files | length > 0
+    - batch_apps | default(false)
+  tags: commit
+  vars:
+    applied_apps: "{{ application_configuration.results | reject('skipped') | map(attribute='app') }}"
+    files: |-
+      {{ [
+          lookup('pipe','git status --porcelain -- ' ~ (applied_apps | map(attribute='app_dir') + (applied_apps | map(attribute='manifest_file'))) | flatten  | join(' ')).splitlines()
+            | reject('match','D')
+            | map('split',' ')
+            | map('last'),
+
+          lookup('pipe','git status --porcelain -- ' ~ (inventory_dir, 'group_vars','kubectl')|path_join).splitlines()
+            | map('split',' ')
+            | map('last'),
+
+          lookup('pipe','git status --porcelain').splitlines()
+            | reject('match','[ D?]')
+            | map('split', ' ')
+            | map('last')
+      ]  | reject('eq', '') }}

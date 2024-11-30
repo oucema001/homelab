@@ -1,11 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s/helm-charts/main/charts/library/common/values.schema.json
 controllers:
   main:
     containers:
-      main:
+      prowlarr:
         image:
           repository: ghcr.io/onedr0p/prowlarr
-          tag: 1.11.4
-
+          tag: 1.18.0
         env:
           TZ: America/New_York
           PROWLARR__INSTANCE_NAME: Prowlarr
@@ -53,6 +53,8 @@ controllers:
         securityContext:
           readOnlyRootFilesystem: false
           runAsUser: 0
+        ports:
+          - containerPort: 8191
 
 defaultPodOptions:
   securityContext:
@@ -63,21 +65,17 @@ defaultPodOptions:
 
 service:
   main:
-    ports:
-      http:
-        port: *port
-  flaresolverr:
     controller: main
     ports:
       http:
-        port: 8191
+        port: *port
+
 
 ingress:
   main:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: ca-issuer
       gethomepage.dev/enabled: "true"
       gethomepage.dev/description: Torrent Tracker Manager
       gethomepage.dev/icon: prowlarr.png
@@ -87,21 +85,19 @@ ingress:
       gethomepage.dev/widget.url: "http://prowlarr.downloads.svc:9696"
       gethomepage.dev/widget.key: "{{HOMEPAGE_VAR_PROWLARR_API_KEY}}"
     hosts:
-      - host: &host trackers.hermleigh.home
+      - host: &host trackers.hermleigh.cc
         paths:
           - path: /
             pathType: Prefix
             service:
-              name: main
+              identifier: main
               port: http
     tls:
       - hosts:
           - *host
-        secretName: prowlarr-tls-ingress
+        secretName: external-wildcard-certificate
 
 persistence:
   config:
     enabled: true
-    type: persistentVolumeClaim
-    size: 100Mi
-    storageClass: ceph-fs-ssd
+    existingClaim: prowlarr-config

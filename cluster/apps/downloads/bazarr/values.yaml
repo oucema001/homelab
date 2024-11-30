@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s/helm-charts/main/charts/library/common/values.schema.json
 controllers:
   main:
     containers:
-      main:
+      bazarr:
         image:
           repository: ghcr.io/onedr0p/bazarr
-          tag: 1.4.0@sha256:c81c4d9cbec093d5a999cfa3cd1af01d3f00d6292d6f5c33608510cef0ed83c7
+          tag: 1.4.2
         env:
           TZ: America/New_York
           POSTGRES_ENABLED: "true"
@@ -65,52 +66,50 @@ controllers:
         fsGroupChangePolicy: OnRootMismatch
         supplementalGroups:
           - 33
+service:
+  main:
+    controller: main
+    ports:
+      http:
+        port: *port
+
 ingress:
   main:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: ca-issuer
       gethomepage.dev/enabled: "true"
       gethomepage.dev/description: Subtitle Downloader
       gethomepage.dev/icon: bazarr.png
       gethomepage.dev/group: Downloads
       gethomepage.dev/name: Bazarr
     hosts:
-      - host: &host subtitles.hermleigh.home
+      - host: &host subtitles.hermleigh.cc
         paths:
           - path: /
             service:
-              name: main
+              identifier: main
               port: http
     tls:
       - hosts:
           - *host
-        secretName: bazarr-ingress-tls
+        secretName: external-wildcard-certificate
 
 persistence:
   add-ons:
     type: emptyDir
   config:
     enabled: true
-    size: 1Gi
-    type: persistentVolumeClaim
-    storageClass: ceph-fs-ssd
-  share:
-    existingClaim: shared-files
-  videos:
-    existingClaim: videos
+    existingClaim: bazarr-config
+  tv:
+    existingClaim: tv-shows
+  movies:
+    existingClaim: movies
   scripts:
     type: configMap
     name: bazarr-scripts
-    defaultMode: 0775
+    defaultMode: 0775 # yamllint disable-line rule:octal-values
     globalMounts:
       - readOnly: true
   tmp:
     type: emptyDir
-
-service:
-  main:
-    ports:
-      http:
-        port: *port

@@ -3,61 +3,64 @@
   "title": "Cluster Application",
   "description": "Definitions used by ansible to generate K8S manifest files",
   "type": "object",
-  "properties": {
-    "apps": {
-      "title": "apps",
+  "patternProperties": {
+    "^[a-zA-Z0-9-]+$": {
       "type": "object",
-      "patternProperties": {
-        "^[a-zA-Z0-9-]+$": {
-          "type": "object",
-          "description": "Application Name. Used to build application path (cluster/$namespace/$app_name), generating names for secrets, PVCs, etc.",
-          "properties": {
-            "path": {
-              "title": "path",
-              "type": "string",
-              "description": "Path to the application directory cluster/, not include the app name itself.\n\nDefaults to value of $namespace in this app.\n\nExample: cluster/db/sql/mysql, path is db/sql"
-            },
-            "charts": {
-              "title": "charts",
-              "type": "array",
-              "description": "List of Helm Charts to deploy with this application.",
-              "items": {
-                "$ref": "#/$defs/HelmChart"
-              }
-            },
-            "pv": {
-              "title": "pv",
-              "type": "boolean",
-              "description": "If there is a pv.yaml file in the application's manifest directory so that it gets included in the kustomization.yaml and ArgoCD ignore difference rules are applied, if we need one."
-            },
-            "namespace": {
-              "title": "namespace",
-              "type": "string",
-              "description": "The namespace to deploy this application to"
-            },
-            "kustomize": {
-              "$ref": "#/$defs/Kustomize"
-            },
-            "pvc": {
-              "$ref": "#/$defs/PVC"
-            },
-            "secrets": {
-              "$ref": "#/$defs/Secrets"
-            },
-            "wave": {
-              "title": "wave",
+      "description": "Application Name. Used to build application path (cluster/$namespace/$app_name), generating names for secrets, PVCs, etc.",
+      "properties": {
+        "path": {
+          "title": "path",
+          "description": "Path to the application directory cluster/, not include the app name itself.\n\nDefaults to value of $namespace in this app.\n\nExample: cluster/db/sql/mysql, path is db/sql",
+          "oneOf": [
+            {
               "type": "string"
             },
-            "enable": {
-              "title": "enable",
-              "type": "boolean",
-              "description": "Whether or not to actually create this application"
+            {
+              "type":"null"
             }
-          },
-          "additionalProperties": true,
-          "required": ["namespace"]
+          ]
+        },
+        "charts": {
+          "title": "charts",
+          "type": "array",
+          "description": "List of Helm Charts to deploy with this application.",
+          "items": {
+            "$ref": "#/$defs/HelmChart"
+          }
+        },
+        "namespace": {
+          "title": "namespace",
+          "type": "string",
+          "description": "The namespace to deploy this application to"
+        },
+        "kustomize": {
+          "$ref": "#/$defs/Kustomize"
+        },
+        "localStorage": {
+          "$ref": "#/$defs/LocalStorage"
+        },
+        "secrets": {
+          "$ref": "#/$defs/Secrets"
+        },
+        "wave": {
+          "title": "wave",
+          "type": "string"
+        },
+        "enable": {
+          "title": "enable",
+          "type": "boolean",
+          "description": "Whether or not to actually create this application"
+        },
+        "ignoreDifferences": {
+          "title": "ignoreDifferences",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IgnoreDifferences"
+          }
         }
-      }
+      },
+      "additionalProperties": true,
+      "required": ["namespace"]
     }
   },
   "$defs": {
@@ -92,6 +95,12 @@
         "version": {
           "title": "version",
           "type": "string"
+        },
+        "apiVersions": {
+          "title": "apiVersions",
+          "type": "boolean",
+          "default": false,
+          "description": "Include a list of API versions in Kustomization file to pass to Capabilities.APIVersions"
         }
       },
       "additionalProperties": true,
@@ -149,7 +158,7 @@
                             "type": {
                               "type": "string",
                               "title": "type",
-                              "enum": ["password"],
+                              "enum": ["password", "key"],
                               "description": "Type of secret to generate"
                             },
                             "name": {
@@ -183,7 +192,7 @@
               "additionalProperties": false
             },
             {
-              "type": "object",
+              "type": "null",
               "description": "There are already sops-encrypted secret file(s) in the application directory. Create the Kustomization file and secret-generator for KSOPS, but don't manage the secret files.",
               "additionalProperties": false
             }
@@ -223,39 +232,92 @@
       },
       "additionalProperties": false
     },
-    "PVC": {
-      "$id": "/PVC",
-      "title": "pvc",
-      "description": "PersistentVolumeClaim definitions, mostly to track dynamically provisioned CSI volumes so that the app can be destroyed and redeployed without losing storage.",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "title": "name",
-            "type": "string",
-            "description": "Name of the PersistentVolumeClaim"
-          },
-          "storageClass": {
-            "title": "storageClass",
-            "type": "string"
-          },
-          "size": {
-            "title": "size",
-            "type": "string"
-          },
-          "volumeName": {
-            "title": "volumeName",
-            "type": "string"
-          },
-          "accessMode": {
-            "title": "accessMode",
-            "type": "string",
-            "enum": ["ReadWriteOnce", "ReadWriteMany"]
-          }
+    "LocalStorage": {
+      "$id": "/LocalStorage",
+      "title": "localStorage",
+      "description": "Definitions for creating PV/PVCs from rancher's local-path-provisioner.\n\nDefaults to a PV/PVC in the default storage directory defined by ansible variable {local_storage_root_dir}/{app.namespace}/{app.name}/{app.name}",
+      "oneOf": [
+        {
+          "type": "null"
         },
-        "additionalProperties": false,
-        "required": ["name", "size", "volumeName"]
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "title": "name",
+                "type": "string",
+                "description": "Name of the storage object"
+              },
+              "path": {
+                "title": "path",
+                "type": "string",
+                "description": "Path of the directory to use. Relative paths are placed under ansible variable `local_storage_root_dir`"
+              },
+              "modes": {
+                "title": "accessMode",
+                "type": "array",
+                "items": {
+                  "enum": ["ReadWriteOnce", "ReadWriteMany"]
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "IgnoreDifferences": {
+      "$id": "/IgnoreDifferences",
+      "title": "ignoreDifferences",
+      "type": "object",
+      "properties": {
+        "group": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "namespace": {
+          "type": "string"
+        },
+        "jsonPointers": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            { "type": "string" }
+          ]
+        },
+        "jqPathExpressions": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            { "type": "string" }
+          ]
+        },
+        "managedFieldsManagers": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            { "type": "string" }
+          ]
+        }
       }
     }
   }

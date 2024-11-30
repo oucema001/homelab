@@ -1,0 +1,157 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s/helm-charts/main/charts/library/common/values.schema.json
+global:
+  nameOverride: paperless
+
+controllers:
+  main:
+    type: deployment
+    containers:
+      paperless-ngx:
+        image:
+          repository: ghcr.io/paperless-ngx/paperless-ngx
+          tag: 2.11.0
+        envFrom:
+          - configMapRef:
+              identifier: config
+          - secretRef:
+              name: paperless-ngx-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 1Gi
+          limits:
+            memory: 1Gi
+
+      gotenberg:
+        image:
+          repository: docker.io/gotenberg/gotenberg
+          tag: 8.8.0
+        env:
+          - name: DISABLE_GOOGLE_CHROME
+            value: "1"
+        resources:
+          requests:
+            cpu: 10m
+            memory: 256Mi
+          limits:
+            memory: 256Mi
+
+      tika:
+        image:
+          repository: docker.io/apache/tika
+          tag: 2.9.2.1-full
+        resources:
+          requests:
+            cpu: 10m
+            memory: 256Mi
+          limits:
+            memory: 256Mi
+
+      # hp-scan-to:
+      #   image: &hp-scan-to
+      #     repository: docker.io/manuc66/node-hp-scan-to
+      #     tag: master
+      #     pullPolicy: Always
+      #   env:
+      #     - name: LABEL
+      #       value: paperless-ngx
+      #     - name: CMDLINE
+      #       value: "-D -l paperless-ngx -r 300 -d /library/consume"
+      #   envFrom:
+      #     - configMapRef:
+      #         name: hp-scan-to-env
+      #   resources: &scan-limits
+      #     limits:
+      #       memory: 64Mi
+      #     requests:
+      #       cpu: 5m
+      #       memory: 64Mi
+      # hp-scan-to-double-sided:
+      #   image: *hp-scan-to
+      #   envFrom:
+      #     - configMapRef:
+      #         name: hp-scan-to-env
+      #   env:
+      #     - name: LABEL
+      #       value: paperless-ngx (double sided)
+      #     - name: CMDLINE
+      #       value: '-D -l paperless-ngx-double-sided -r 300 -d /library/consume/double-sided'
+      #   resources: *scan-limits
+
+configMaps:
+  config:
+    enabled: true
+    data:
+      PAPERLESS_CONSUMER_POLLING: "60"
+      PAPERLESS_CONSUMER_RECURSIVE: "true"
+      PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS: "true"
+      PAPERLESS_CONSUMER_ENABLE_COLLATE_DOUBLE_SIDED: "true"
+      PAPERLESS_CONSUMPTION_DIR: /library/consume
+      PAPERLESS_DBENGINE: postgresql
+      PAPERLESS_DBHOST: cnpg-cluster-rw.db.svc
+      PAPERLESS_DATA_DIR: /library/data
+      PAPERLESS_EXPORT_DIR: /library/export
+      PAPERLESS_MEDIA_ROOT: /library/media
+      PAPERLESS_TRASH_DIR: /trash
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_OCR_MODE: skip
+      PAPERLESS_OCR_ROTATE_PAGES: "true"
+      PAPERLESS_OCR_IMAGE_DPI: "300"
+      PAPERLESS_PORT: &port "8080"
+      PAPERLESS_TASK_WORKERS: "2"
+      PAPERLESS_TIME_ZONE: &tz America/New_York
+      PAPERLESS_TIKA_ENABLED: "1"
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://localhost:3000
+      PAPERLESS_TIKA_ENDPOINT: http://localhost:9998
+      PAPERLESS_URL: https://paperless.hermleigh.cc
+      PAPERLESS_REDIS: redis://redis-master.db.svc:6379
+      PAPERLESS_USE_X_FORWARD_HOST: "true"
+      PAPERLESS_USE_X_FORWARD_PORT: "true"
+      USERMAP_UID: "997"
+      USERMAP_GID: "997"
+      TZ: *tz
+
+service:
+  main:
+    controller: main
+    ports:
+      http:
+        port: *port
+
+ingress:
+  main:
+    enabled: true
+    className: nginx
+    annotations:
+      gethomepage.dev/enabled: "true"
+      gethomepage.dev/group: "Apps & Services"
+      gethomepage.dev/icon: paperless-ngx.png
+      gethomepage.dev/description: "Scan, index and archive all your physical documents"
+      gethomepage.dev/name: Paperless-NGX
+      gethomepage.dev/widget.type: paperlessngx
+      gethomepage.dev/widget.url: http://paperless-ngx.home.svc:8080
+      gethomepage.dev/widget.key: "{{HOMEPAGE_VAR_PAPERLESS_TOKEN}}"
+      gethomepage.dev/widget.fields: '["total", "inbox"]'
+    hosts:
+      - host: &host paperless.hermleigh.cc
+        paths:
+          - path: /
+            service:
+              identifier: main
+              port: http
+    tls:
+      - hosts:
+          - *host
+        secretName: external-wildcard-certificate
+
+persistence:
+  library:
+    enabled: true
+    existingClaim: paperless-library
+    globalMounts:
+      - path: /library
+  trash:
+    enabled: true
+    type: emptyDir
+    globalMounts:
+      - path: /trash

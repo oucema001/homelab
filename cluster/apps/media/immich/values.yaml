@@ -16,16 +16,12 @@ envFrom:
       name: immich-secret
 
 image:
-  tag: v1.92.1
+  tag: v1.108.0
 
 immich:
   persistence:
-    # Main data store for all photos shared between different components.
     library:
-      # Automatically creating the library volume is not supported by this chart
-      # You have to specify an existing PVC to use
-      existingClaim: shared-files
-
+      existingClaim: immich-library
 
 server:
   enabled: true
@@ -38,19 +34,21 @@ server:
       annotations:
         # proxy-body-size is set to 0 to remove the body limit on file uploads
         nginx.ingress.kubernetes.io/proxy-body-size: "0"
-        cert-manager.io/cluster-issuer: ca-issuer
         gethomepage.dev/enabled: "true"
         gethomepage.dev/group: "Apps & Services"
         gethomepage.dev/name: "Immich"
         gethomepage.dev/icon: immich.png
+        gethomepage.dev/widget.type: immich
+        gethomepage.dev/widget.url: "http://immich.media.svc:3001"
+        gethomepage.dev/widget.key: "{{HOMEPAGE_VAR_IMMICH_API_KEY}}"
       hosts:
-        - host: &host immich.hermleigh.home
+        - host: &host immich.hermleigh.cc
           paths:
             - path: "/"
       tls:
         - hosts:
             - *host
-          secretName: immich-ingress-tls
+          secretName: external-wildcard-certificate
 
 microservices:
   enabled: true
@@ -61,8 +59,8 @@ microservices:
       enabled: true
       size: 1Gi
       type: pvc
-      accessMode: ReadWriteMany
-      storageClass: ceph-fs-hdd
+      accessMode: ReadWriteOnce
+      storageClass: local-path-shared
   image:
     repository: ghcr.io/immich-app/immich-server
     pullPolicy: IfNotPresent
@@ -79,5 +77,11 @@ machine-learning:
       enabled: true
       size: 10Gi
       type: pvc
-      accessMode: ReadWriteMany
-      storageClass: ceph-fs-hdd
+      accessMode: ReadWriteOnce
+      storageClass: local-path-shared
+
+persistence:
+  pictures:
+    enabled: true
+    type: pvc
+    existingClaim: pictures

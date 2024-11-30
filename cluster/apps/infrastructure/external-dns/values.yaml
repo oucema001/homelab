@@ -71,13 +71,14 @@ logLevel: info
 logFormat: text
 
 interval: 1h
-triggerLoopOnEvent: false
+triggerLoopOnEvent: true
 
 namespaced: false
 
 sources:
   - service
   - ingress
+  - traefik-proxy
 
 policy: sync
 

@@ -11,6 +11,7 @@ controller:
     enable-brotli: "true"
     enable-real-ip: "true"
     hsts-max-age: 31449600
+    hsts: "true"
     keep-alive-requests: 10000
     keep-alive: 120
     proxy-body-size: 0

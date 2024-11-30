@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/gethomepage/homepage
-  tag: v0.8.5
+  tag: v0.9.5
 
 controller:
   strategy: RollingUpdate
@@ -34,13 +34,6 @@ ingress:
   main:
     enabled: true
     annotations:
-      cert-manager.io/cluster-issuer: ca-issuer
-      cert-manager.io/subject-countries: US
-      cert-manager.io/subject-organization: HERMLEIGH.HOME
-      cert-manager.io/subject-organizationalunits: Hermleigh House Network,Kubernetes Cluster - Seawolf,Services
-      cert-manager.io/private-key-algorithm: ECDSA
-      cert-manager.io/private-key-size: "512"
-      cert-manager.io/common-name: Cluster Homepage
       # This label will enable discover of this deployment in Homepage
       gethomepage.dev/enabled: "true"
       # These annotations will configure how this deployment is shown in Homepage
@@ -50,7 +43,7 @@ ingress:
       gethomepage.dev/icon: "homepage.png"
     ingressClassName: nginx
     hosts:
-      - host: &host www.seawolf.hermleigh.home
+      - host: &host seawolf.hermleigh.cc
         paths:
           - path: /
             pathType: Prefix
@@ -58,7 +51,7 @@ ingress:
     tls:
       - hosts:
           - *host
-        secretName: homepage-ingress-tls
+        secretName: external-wildcard-certificate
 
 # All the config files for Homepage can be specified under their relevant config block.
 config:
@@ -71,10 +64,9 @@ persistence:
     type: emptyDir
     mountPath: /app/config/logs
 
-# resources:
-#   requests:
-#     memory: 10Mi
-#     cpu: 10m
-#   limits:
-#     memory: 200Mi
-#     cpu: 500m
+resources:
+  requests:
+    memory: 200Mi
+    cpu: 10m
+  limits:
+    memory: 1Gi

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s/helm-charts/main/charts/library/common/values.schema.json
 controllers:
   main:
     type: statefulset
@@ -7,7 +8,7 @@ controllers:
         - name: config
           accessMode: ReadWriteOnce
           size: 30Gi
-          storageClass: ceph-fs-hdd
+          storageClass: local-path
           globalMounts:
             - path: /config
 
@@ -23,35 +24,53 @@ controllers:
           - 109
 
     containers:
-      main:
+      jellyfin:
         image:
-          repository: ghcr.io/onedr0p/jellyfin
-          tag: 10.8.11@sha256:926e2a9f6677a0c7b12feba29f36c954154869318d6a52df72f72ff9c74cf494
+          repository: docker.io/jellyfin/jellyfin
+          tag: 10.9.4
         env:
           DOTNET_SYSTEM_IO_DISABLEFILELOCKING: "true"
           JELLYFIN_FFmpeg__probesize: 50000000
           JELLYFIN_FFmpeg__analyzeduration: 500000000
-          JELLYFIN_PublishedServerUrl: &ip 172.16.1.39
+          JELLYFIN_PublishedServerUrl: 172.16.1.24
         resources:
           requests:
             cpu: 100m
             memory: 9248M
           limits:
             memory: 9248M
-            cpu: 250m
+      jellyseer:
+        image:
+          repository: docker.io/fallenbagel/jellyseerr
+          tag: 1.9.0
+        env:
+          TZ: America/New_York
+          LOG_LEVEL: "info"
+          PORT: &port 8080
+        resources:
+          requests:
+            cpu: 15m
+            memory: 324M
+          limits:
+            memory: 324M
 
 service:
-  main:
+  jellyfin:
+    controller: main
     ports:
       http:
         port: 8096
+  jellyseer:
+    controller: main
+    ports:
+      http:
+        port: *port
 
 ingress:
-  main:
+  jellyfin:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: ca-issuer
       gethomepage.dev/enabled: "true"
       gethomepage.dev/description: "Free Software Media System"
       gethomepage.dev/icon: jellyfin.png
@@ -62,32 +81,57 @@ ingress:
       gethomepage.dev/widget.key: "{{HOMEPAGE_VAR_JELLYFIN_API_KEY}}"
       gethomepage.dev/widget.enableBlocks: "true"
     hosts:
-      - host: &host jellyfin.hermleigh.home
+      - host: &host jellyfin.hermleigh.cc
         paths:
           - path: /
             service:
-              name: main
+              identifier: jellyfin
               port: http
     tls:
       - hosts:
           - *host
-        secretName: jellyfin-ingress-tls
+        secretName: external-wildcard-certificate
+  jellyseer:
+    enabled: true
+    className: nginx
+    annotations:
+      gethomepage.dev/enabled: "true"
+      gethomepage.dev/name: "Jellyseerr"
+      gethomepage.dev/group: "Downloads"
+      gethomepage.dev/icon: "jellyseerr"
+      gethomepage.dev/description: "Request management and media discovery tool."
+    hosts:
+      - host: &jellyseer-host jellyseer.hermleigh.cc
+        paths:
+          - path: /
+            pathType: Prefix
+            service:
+              identifier: jellyseer
+              port: http
+    tls:
+      - hosts:
+          - *jellyseer-host
+        secretName: external-wildcard-certificate
 
 persistence:
-  shared:
-    existingClaim: shared-files
-    globalMounts:
-      - path: /shared
-  videos:
-    existingClaim: videos
-    globalMounts:
-      - path: /videos
+  config:
+    existingClaim: jellyfin
+  music:
+    existingClaim: music
+  movies:
+    existingClaim: movies
+  audio:
+    existingClaim: audio
+  tv-shows:
+    existingClaim: tv-shows
   transcode:
     type: emptyDir
-    globalMounts:
-      - path: /transcode
   cache:
-    enabled: true
     type: emptyDir
-    globalMounts:
-      - path: /cache
+  jellyseer-config:
+    enabled: true
+    existingClaim: jellyseer-config
+    advancedMounts:
+      main:
+        jellyseer:
+          - path: /app/config

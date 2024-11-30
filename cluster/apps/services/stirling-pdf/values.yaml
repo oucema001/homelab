@@ -1,13 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s/helm-charts/main/charts/library/common/values.schema.json
 controllers:
   main:
     containers:
-      main:
-        nameOverride: stirling-pdf
+      stirling-pdf:
         image:
           repository: docker.io/frooodle/s-pdf
-          tag: 0.19.0
+          tag: 0.27.0
+        resources:
+          requests:
+            cpu: 10m
+            memory: 256Mi
+          limits:
+            memory: 256Mi
 service:
   main:
+    controller: main
     ports:
       http:
         port: 8080
@@ -16,19 +23,18 @@ ingress:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: ca-issuer
       gethomepage.dev/enabled: "true"
       gethomepage.dev/group: "Apps & Services"
       gethomepage.dev/name: Stirling PDF
       gethomepage.dev/icon: stirling-pdf.png
     hosts:
-      - host: &host "pdf.hermleigh.home"
+      - host: &host pdf.hermleigh.cc
         paths:
           - path: /
             service:
-              name: main
+              identifier: main
               port: http
     tls:
       - hosts:
           - *host
-        secretName: stirling-pdf-ingress-tls
+        secretName: external-wildcard-certificate

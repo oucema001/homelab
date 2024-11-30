@@ -2,11 +2,11 @@ image:
   repository: netboxcommunity/netbox
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: v3.7.0
+  tag: v4.0.7
 
 readinessProbe:
   enabled: true
-  initialDelaySeconds: 60
+  initialDelaySeconds: 120
   periodSeconds: 15
 
 postgresql:
@@ -57,33 +57,31 @@ cachingRedis:
 
 persistence:
   enabled: true
-  storageClass: ceph-fs-ssd
+  existingClaim: netbox-media
 
 ingress:
   enabled: true
   className: nginx
   annotations:
-    cert-manager.io/cluster-issuer: ca-issuer
     gethomepage.dev/enabled: "true"
-    gethomepage.dev/group: "Apps & Services"
+    gethomepage.dev/group: "Infrastructure"
     gethomepage.dev/icon: netbox.png
     gethomepage.dev/description: "Infrastructure inventory and IPAM solution"
   hosts:
-    - host: &host netbox.hermleigh.home
+    - host: &host netbox.hermleigh.cc
       paths:
         - /
   tls:
-    - secretName: netbox-ingress-tls
+    - secretName: external-wildcard-certificate
       hosts:
         - *host
 
 resources:
   limits:
-    cpu: 250m
-    memory: 1500Mi
+    memory: 1Gi
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 200m
+    memory: 1Gi
 
 extraContainers:
   - name: graphite
@@ -117,3 +115,13 @@ extraVolumes:
 extraVolumeMounts:
   - name: nrx-files
     mountPath: /graphite
+
+# Configuration of Cron settings
+housekeeping:
+  enabled: true
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 5
+  restartPolicy: OnFailure
+  schedule: '0 7 * * 0'
+  successfulJobsHistoryLimit: 2
+  suspend: false

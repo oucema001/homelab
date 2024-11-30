@@ -5,17 +5,18 @@
     kind: Namespace
     name: "{{ app.namespace }}"
 
+- name: Set secret fact | {{ app.name }}
+  set_fact:
+    secrets: {}
+
 - name: Manage app secrets | {{ app.name }}
   when: app.secrets is defined
   block:
-    - name: Generate secrets | {{ app.name }}
-      include_tasks: generate_secret.yml
+    - name: Manage app secrets | {{ app.name }}
+      include_tasks: manage_secret.yml
       loop: "{{ app.secrets | dict2items(key_name='name') }}"
       loop_control:
         loop_var: secret
-      when:
-        - sops_file is not file
-        - secret.value != {}
       vars:
         sops_file: "{{ (app.app_dir, secret.name+'.sops.yaml')| path_join }}"
 
@@ -41,18 +42,77 @@
   vars:
     k8s_apis: "{{ cluster_info.apis.keys() | list }}"
 
-- name: "Install PersistentVolumeClaim file | {{ app.name }}"
-  template:
-    src: 'pvc.yaml.j2'
-    dest: "{{ app.app_dir }}/pvc.yaml"
-    mode: "0644"
-    force: true
-  when: app.pvc is defined and app.pvc
-  register: pvc
+- name: Storage
+  when: ('localStorage' in app)
+  vars:
+    storage_dirs: []
+    paths: []
+  block:
+    - name: Find Storage Dirs | {{ app.name }}
+      set_fact:
+        paths: "{{ paths +
+            [ (item.path|default('') is abs)
+                | ternary(
+                    item.path|default(''),
+                    (
+                      local_storage_root_dir,
+                      app.namespace,
+                      app.name,
+                      item.path | default(item.name) | default(app.name)
+                    )
+                ) | path_join ]
+          }}"
+      with_items:
+      - "{{ app.localStorage }}"
+      loop_control:
+        label: "{{ item.path | default(app.name) }}"
 
-- name: Ensure cluster/bootstrap namespace dir exists
+    - name: Ensure target directories exist | {{ app.name }}
+      delegate_to: parche
+      become: true
+      file:
+        path: "{{ item }}"
+        state: directory
+        recurse: true
+        mode: "0775"
+        group: kube
+      loop: "{{ paths }}"
+
+    - name: Get filesystem size for each directory | {{ app.name }}
+      delegate_to: parche
+      command: "df -h {{ item }}"
+      register: fs_sizes
+      loop: "{{ paths }}"
+
+    - name: Build storage_dirs | {{ app.name }}
+      set_fact:
+        storage_dirs: "{{ storage_dirs +
+            [{
+              'path': item,
+              'modes': app.localStorage[i].modes | default(['ReadWriteOnce']),
+              'name': app.localStorage[i].name | default(app.name),
+              'size': ((fs_sizes.results[i].stdout | community.general.jc('df'))[0]['size'] / (10 ** 9)) ~ 'Gi'
+            }]
+          }}" # noqa jinja[invalid]
+      loop: "{{ paths }}"
+      loop_control:
+        index_var: i
+
+    - name: Generate storage manifest file | {{ app.name }}
+      template:
+        src: storage.yaml.j2
+        dest: "{{ app.app_dir }}/storage.yaml"
+        mode: "0644"
+        force: true
+  always:
+    - name: Clear variables
+      set_fact:
+        storage_dirs: []
+        paths: []
+
+- name: Ensure cluster/bootstrap namespace dir exists | {{ app.name }}
   file:
-    path: "{{ (cluster_dir, 'bootstrap', app.namespace ) | path_join }}"
+    path: "{{ app.manifest_file | dirname }}"
     state: directory
 
 - name: ArgoCD application manifest | {{ app.name }}
@@ -84,6 +144,7 @@
     url: "{{ git_repo_ssh_url }}"
     push: "{{ git_push | default(true) }}"
     branch: "{{ git_branch }}"
+    push_force: "{{ git_push_force | default(false) }}"
   when:
     - files | length > 0
     - not batch_apps | default(false)
@@ -93,19 +154,17 @@
     files: |-
       {{ [
           lookup('pipe','git status --porcelain -- ' ~ app.app_dir).splitlines()
+            | reject('match','D')
             | map('split',' ')
             | map('last'),
 
           lookup('pipe','git status --porcelain -- ' ~ app.manifest_file).split(' ')| last,
 
           lookup('pipe','git status --porcelain').splitlines()
-            | map('list')
-            | rejectattr('0','eq', ' ')
-            | rejectattr('0', 'eq', '?')
-            | map('join')
+            | reject('match','[ D?]')
             | map('split', ' ')
             | map('last')
-      ]  | reject('eq', '') | flatten}}
+      ]  | reject('eq', '') | flatten }}
 
 - name: Wait a minute for the commit to land in Github
   pause:
@@ -113,8 +172,10 @@
   tags: commit
   when:
     - git_commit is not skipped
+    - git_push | default(true) is true
 
 - name: Launch application when wave is defined
+  when: app_tasks
   block:
     - name: Launch application now | {{ app.name }}
       kubernetes.core.k8s:
@@ -131,14 +192,13 @@
           skip: true
       loop_control:
         loop_var: taskfile
-      register: app_tasks
+      register: post_launch_tasks
       tags:
         - app_tasks
 
-- name: Check before continuing to next app | {{ app.name }}
+- name: Pause before continuing to next app | {{ ansible_loop.nextitem.name }}
   pause:
     prompt: "Continue to {{ ansible_loop.nextitem.name }}"
   when:
     - not ansible_loop.last
     - not app_no_loop_pause|default(false)
-    - not batch_apps | default(false)

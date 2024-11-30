@@ -1,0 +1,48 @@
+#
+# Ansible managed
+#
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: home-assistant
+  finalizers:
+  - kubernetes.io/pv-protection
+spec:
+  accessModes:
+  - ReadWriteOnce
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: home-assistant
+    namespace: home
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  storageClassName: local-storage
+  capacity:
+    storage: 153.0Gi
+  local:
+    path: /srv/cluster/volumes/home/home-assistant/home-assistant
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - parche
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: home-assistant
+  namespace: home
+  finalizers:
+  - kubernetes.io/pvc-protection
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 153.0Gi
+  storageClassName: local-storage
+  volumeName: home-assistant

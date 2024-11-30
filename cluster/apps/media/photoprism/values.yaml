@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s/helm-charts/main/charts/library/common/values.schema.json
+controllers:
+  main:
+    strategy: RollingUpdate
+    annotations:
+      reloader.stakater.com/auto: "true"
+    containers:
+      main:
+        image:
+          repository: docker.io/photoprism/photoprism
+          tag: 240711
+        env:
+          PHOTOPRISM_STORAGE_PATH: &storage /config
+          PHOTOPRISM_ORIGINALS_PATH: &originals /pictures
+          PHOTOPRISM_DEBUG: "false"
+          PHOTOPRISM_PUBLIC: "true"
+          PHOTOPRISM_SITE_URL: "https://photos.hermleigh.home"
+          PHOTOPRISM_ORIGINALS_LIMIT: 4000 # in MB (default 1000)
+        envFrom:
+          - secretRef:
+              name: photoprism-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+
+service:
+  main:
+    controller: main
+    ports:
+      http:
+        port: 2342
+
+ingress:
+  main:
+    enabled: true
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: 4G
+      gethomepage.dev/enabled: "true"
+      gethomepage.dev/description: "AI-Powered Photos App for the Decentralized Web"
+      gethomepage.dev/icon: photoprism.png
+      gethomepage.dev/group: "Media"
+      gethomepage.dev/name: Photoprism
+      gethomepage.dev/widget.type: photoprism
+      gethomepage.dev/widget.url: "http://photoprism.media.svc:2342"
+      gethomepage.dev/widget.username: '{{HOMEPAGE_VAR_PHOTOPRISM_USERNAME}}'
+      gethomepage.dev/widget.password: '{{HOMEPAGE_VAR_PHOTOPRISM_PASSWORD}}'
+    hosts:
+      - host: &host photos.hermleigh.cc
+        paths:
+          - path: /
+            service:
+              identifier: main
+              port: http
+    tls:
+      - hosts:
+          - *host
+        secretName: external-wildcard-certificate
+
+persistence:
+  config:
+    enabled: true
+    existingClaim: photoprism
+    globalMounts:
+      - path: *storage
+  originals:
+    existingClaim: pictures
+    globalMounts:
+      - path: *originals

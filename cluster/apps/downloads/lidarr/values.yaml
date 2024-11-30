@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s/helm-charts/main/charts/library/common/values.schema.json
 controllers:
   main:
     containers:
       main:
         image:
           repository: ghcr.io/onedr0p/lidarr
-          tag: 2.0.7
+          tag: 2.3.3
         env:
           TZ: America/New_York
           LIDARR__INSTANCE_NAME: Lidarr
@@ -23,6 +24,7 @@ controllers:
 
 service:
   main:
+    controller: main
     ports:
       http:
         port: *port
@@ -32,7 +34,6 @@ ingress:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: ca-issuer
       gethomepage.dev/enabled: "true"
       gethomepage.dev/description: Music Management
       gethomepage.dev/group: Downloads
@@ -47,20 +48,20 @@ ingress:
         sub_filter '</head>' '<link rel="stylesheet" type="text/css" href="https://theme-park.dev/css/base/lidarr/nord.css"></head>';
         sub_filter_once on;
     hosts:
-      - host: &host music.hermleigh.home
+      - host: &host music.hermleigh.cc
         paths:
           - path: /
             pathType: Prefix
             service:
-              name: main
+              identifier: main
               port: http
     tls:
       - hosts:
           - *host
-        secretName: lidarr-tls-ingress
+        secretName: external-wildcard-certificate
 
 defaultPodOptions:
-  podSecurityContext:
+  securityContext:
     runAsUser: 568
     runAsGroup: 568
     fsGroup: 568
@@ -69,9 +70,8 @@ defaultPodOptions:
 
 persistence:
   config:
-    size: 1Gi
-    type: persistentVolumeClaim
-    storageClass: ceph-fs-ssd
-  media:
-    enabled: true
-    existingClaim: shared-files
+    existingClaim: lidarr-config
+  music:
+    existingClaim: music
+  downloads:
+    existingClaim: downloads

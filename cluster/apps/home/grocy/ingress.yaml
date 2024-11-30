@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grocy
+  namespace: services
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: "Apps & Services"
+    gethomepage.dev/icon: grocy.png
+    gethomepage.dev/description: "ERP beyond your Fridge"
+  labels:
+    app.kubernetes.io/name: grocy
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: &host grocy.hermleigh.cc
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: grocy
+              port:
+                number: 8080
+  tls:
+    - hosts:
+        - *host
+      secretName: external-wildcard-certificate

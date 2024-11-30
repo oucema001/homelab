@@ -1,3 +1,6 @@
+#
+# Ansible managed
+#
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -12,7 +15,7 @@ spec:
   sources:
   - chart: metallb
     repoURL: https://metallb.github.io/metallb
-    targetRevision: 0.13.12
+    targetRevision: v0.13.11
     helm:
       valueFiles:
       - $repo/cluster/apps/infrastructure/metallb/values.yaml
@@ -24,6 +27,11 @@ spec:
   destination:
     name: in-cluster
     namespace: metallb-system
+  ignoreDifferences:
+  - group: apiextensions.k8s.io
+    kind: CustomResourceDefinition
+    jsonPointers:
+    - /spec/conversion/webhook/clientConfig/caBundle
   syncPolicy:
     automated:
       prune: true
@@ -31,3 +39,4 @@ spec:
     syncOptions:
     - CreateNamespace=true
     - ServerSideApply=true
+    - RespectIgnoreDifferences=true

@@ -1,9 +1,15 @@
 installCRDs: false
 
+extraArgs:
+  - '--default-issuer-kind=ClusterIssuer'
+  - '--default-issuer-name=ca-issuer'
+  - '--dns01-recursive-nameservers-only'
+  - '--dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53'
+
 prometheus:
+  enabled: true
+  servicemonitor:
     enabled: true
-    servicemonitor:
-        enabled: true
-        prometheusInstance: kube-prometheus-stack
-        labels:
-            release: kube-prometheus-stack
+    prometheusInstance: kube-prometheus-stack
+    labels:
+      release: kube-prometheus-stack

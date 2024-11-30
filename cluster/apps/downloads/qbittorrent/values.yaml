@@ -1,10 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s/helm-charts/main/charts/library/common/values.schema.json
 controllers:
   main:
     containers:
-      main:
+      qbittorrent:
         image:
           repository: ghcr.io/onedr0p/qbittorrent
-          tag: 4.6.2
+          tag: 4.6.6
         env:
           TZ: America/New_York
           QBITTORRENT__PORT: &port 8080
@@ -12,8 +13,8 @@ controllers:
           QBT_BitTorrent__Session__IPFilter: 'https:/github.com/Naunter/BT_BlockLists/blob/master/combined_2.txt?raw=true'
           QBT_BitTorrent__Session_IPFilteringEnabled: 'true'
           QBT_BitTorrent__Session__TrackerFilteringEnabled: 'true'
-          QBT_BitTorrent__Session__DefaultSavePath: '/media/Downloads'
-          QBT_BitTorrent__Session__TorrentExportDirectory: '/media/Downloads/torrents'
+          QBT_BitTorrent__Session__DefaultSavePath: '/downloads'
+          QBT_BitTorrent__Session__TorrentExportDirectory: '/downloads/torrents'
           QBT_Preferences__WebUI__AuthSubnetWhitelist: '10.0.0.0/8, 172.16.0.0/12'
           QBT_Preferences__WebUI__AuthSubnetWhitelistEnabled: 'true'
         resources:
@@ -25,6 +26,20 @@ controllers:
         securityContext: &security-context
           runAsUser: 568
           runAsGroup: 568
+      exporter:
+        image:
+          repository: ghcr.io/esanchezm/prometheus-qbittorrent-exporter
+          tag: sha-8ac240b
+        env:
+          EXPORTER_PORT: &ex-port 8081
+          QBITTORRENT_HOST: localhost
+          QBITTORRENT_PORT: *port
+        resources:
+          requests:
+            cpu: 5m
+            memory: 36M
+          limits:
+            memory: 128M
 
 defaultPodOptions:
   securityContext:
@@ -34,11 +49,12 @@ defaultPodOptions:
     supplementalGroups: [10000]
 
 service:
-  main:
+  qbittorrent:
+    controller: main
     ports:
       http:
         port: *port
-  bittorrent:
+  ext:
     enabled: true
     type: LoadBalancer
     controller: main
@@ -49,13 +65,18 @@ service:
         protocol: TCP
         targetPort: *port-bt
     externalTrafficPolicy: Local
+  exporter:
+    enabled: true
+    controller: main
+    ports:
+      http:
+        port: *ex-port
 
 ingress:
   main:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: ca-issuer
       gethomepage.dev/enabled: "true"
       gethomepage.dev/description: Torrent Management
       gethomepage.dev/group: Downloads
@@ -64,33 +85,41 @@ ingress:
       gethomepage.dev/widget.type: "qbittorrent"
       gethomepage.dev/widget.url: "http://qbittorrent.downloads.svc:8080"
     hosts:
-      - host: &host torrent.hermleigh.home
+      - host: &host torrent.hermleigh.cc
         paths:
           - path: /
             pathType: Prefix
             service:
-              name: main
+              identifier: qbittorrent
               port: http
     tls:
       - hosts:
           - *host
-        secretName: qbittorrent-tls-ingress
+        secretName: external-wildcard-certificate
 
-# Note: If downloading very large torrents it might be worth using NFS for your download directory.
-# Beware if you are downloading torrents directly to a ZFS dataset that dataset will accrue fragmentation.
 persistence:
   config:
     enabled: true
-    size: 50Mi
-    storageClass: ceph-fs-ssd
-  media:
+    existingClaim: qbittorrent-config
+  downloads:
     enabled: true
     type: persistentVolumeClaim
-    existingClaim: shared-files
+    existingClaim: downloads
   incomplete:
     enabled: true
     type: emptyDir
-  videos:
+  music:
     enabled: true
-    type: persistentVolumeClaim
-    existingClaim: videos
+    existingClaim: music
+  movies:
+    enabled: true
+    existingClaim: movies
+  tv-shows:
+    enabled: true
+    existingClaim: tv-shows
+  books:
+    enabled: true
+    existingClaim: books
+  audio:
+    enabled: true
+    existingClaim: audio

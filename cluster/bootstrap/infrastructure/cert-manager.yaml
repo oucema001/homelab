@@ -1,3 +1,6 @@
+#
+# Ansible managed
+#
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -12,7 +15,7 @@ spec:
   sources:
   - chart: cert-manager
     repoURL: https://charts.jetstack.io
-    targetRevision: v1.13.3
+    targetRevision: v1.15.1
     helm:
       valueFiles:
       - $repo/cluster/apps/infrastructure/cert-manager/values.yaml

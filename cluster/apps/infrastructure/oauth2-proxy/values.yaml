@@ -1,0 +1,62 @@
+config:
+  existingSecret: oauth2-proxy-secret
+  configFile: |-
+    provider = "keycloak-oidc"
+    provider_display_name = "Keycloak"
+    oidc_issuer_url = "https://keycloak.hermleigh.cc/realms/hermleigh.cc"
+    email_domains = [ "*" ]
+    whitelist_domains = ".hermleigh.cc"
+    pass_authorization_header = true
+    pass_access_token = true
+    pass_user_headers = true
+    pass_host_header = true
+    set_authorization_header = true
+    set_xauthrequest = true
+    use_system_trust_store = true
+    reverse_proxy = true
+    redis_connection_url = "redis://redis-master.db.svc:6379"
+    session_store_type = "redis"
+    code_challenge_method = "S256"
+    show_debug_on_error = true
+    insecure_oidc_allow_unverified_email = true
+    cookie_csrf_per_request = true
+    cookie_csrf_expire = "5m"
+    cookie_domains = [".hermleigh.cc"]
+    silence_ping_logging = true
+    redirect_url = "https://sso.hermleigh.cc/oauth2/callback"
+
+ingress:
+  enabled: true
+  path: /
+  className: nginx
+  hosts:
+    - &host sso.hermleigh.cc
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "2000m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "32k"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  tls:
+    - secretName: external-wildcard-certificate
+      hosts:
+        - *host
+
+extraArgs:
+  upstream: file:///dev/null
+  skip-provider-button: "true"
+
+sessionStorage:
+  type: redis
+  redis:
+    clientType: standalone
+    standalone:
+      connectionUrl: redis://redis-master.db.svc:6379
+redis:
+  enabled: false
+
+service:
+  portNumber: 4180
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    prometheusInstance: kube-prometheus
