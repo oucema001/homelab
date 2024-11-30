@@ -17,4 +17,4 @@ collections:
   - cisco.ios
 roles:
   - name: xanmanning.k3s
-    version: v3.4.2
+    version: v3.4.4
